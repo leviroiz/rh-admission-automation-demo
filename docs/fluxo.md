@@ -37,6 +37,8 @@ Uma falha após criar um atalho não desfaz a criação. A próxima execução c
 
 ## Roteiro de aceitação no Google
 
+**Validação real pendente.** A tabela abaixo resume expectativas; siga o [roteiro detalhado de validação](validacao-google.md) para preparação, execução segura e registro de evidências.
+
 | Cenário | Resultado esperado |
 | --- | --- |
 | CSV sem documentos, simulação | SIMULADO; sem pasta e sem data nova |
