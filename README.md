@@ -1,8 +1,22 @@
 # Automação de admissões do RH — demonstração
 
+[![Testes automatizados](https://github.com/leviroiz/rh-admission-automation-demo/actions/workflows/tests.yml/badge.svg)](https://github.com/leviroiz/rh-admission-automation-demo/actions/workflows/tests.yml)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
+
 **Google Forms · Google Sheets · Google Apps Script · Google Drive**
 
-Versão pública sanitizada, baseada na descrição de um processo real de organização de documentos de admissão. Esta implementação foi reconstruída para demonstração: **não é o código de produção, não contém dados da empresa e não acessa seus sistemas**. Todos os registros de exemplo são fictícios. Não há métricas de impacto presumidas nem vínculo oficial com uma empresa.
+Demonstração pública de organização de documentos de admissão: transforma respostas de uma planilha em pastas por registro e atalhos no Drive, com acompanhamento de status. **Demo sanitizada baseada na descrição de um processo real**, usando apenas registros fictícios.
+
+Reconstruída para portfólio: **não é código de produção, não contém dados empresariais nem acesso aos sistemas da empresa**. Não há métricas de impacto presumidas nem vínculo oficial com uma empresa.
+
+## Destaques técnicos
+
+- **16 testes automatizados com serviços simulados** e CI com GitHub Actions.
+- **Idempotência e retomada após falha parcial**: reaproveita pasta e atalhos, com registro estável e estrutura preservada.
+- **Controle de concorrência** dentro do mesmo projeto Apps Script e sanitização de erros.
+- **Simulação por padrão**, sem acessar o Drive; originais não são movidos, copiados ou excluídos.
+
+**Validação real no Google: pendente.** Os testes locais não comprovam a integração real. O [roteiro de validação](docs/validacao-google.md) prepara os cenários e as evidências para a próxima etapa, exclusivamente em ambiente de teste.
 
 ## Contexto e problema
 
@@ -12,11 +26,14 @@ Receber documentos por formulário e organizar manualmente pastas e links exige 
 
 ```mermaid
 flowchart LR
-  F[Google Forms: dados fictícios] --> S[Google Sheets: respostas]
-  S --> A[Apps Script: validação e bloqueio]
-  A --> D[Google Drive: pasta por registro e atalhos]
-  D --> R[Sheets: link da pasta, status e data]
+  F["Google Forms: dados fictícios"] --> S["Google Sheets: respostas"]
+  S -->|"Linha enviada ou selecionada"| A["Apps Script: validação e bloqueio"]
+  A -->|"Somente com DRY_RUN=false"| D["Google Drive: pasta por registro e atalhos"]
+  D -->|"URL da pasta"| A
+  A -->|"Pasta, status e data"| S
 ```
+
+Em simulação, o Apps Script escreve apenas `SIMULADO` na planilha, sem acessar o Drive nem gerar link ou data novos. Em falhas, tenta registrar erro quando é seguro escrever; veja as limitações abaixo.
 
 O script lê uma linha, valida o registro e o nome demonstrativo, encontra ou cria uma pasta pelo registro estável e organiza os documentos com **atalhos**. Os arquivos originais não são movidos, copiados nem excluídos. O nome é validado, mas não é usado no nome da pasta. A arquitetura e os cenários de falha estão em [docs/fluxo.md](docs/fluxo.md).
 
@@ -38,6 +55,7 @@ src/Code.gs                 Implementação Google Apps Script
 examples/respostas-demo.csv Registros inteiramente fictícios
 examples/README.md          Entradas e saídas esperadas, incluindo recuperação
 docs/fluxo.md               Fluxo, segurança e cenários de validação
+docs/validacao-google.md    Roteiro de integração real (execução pendente)
 tests/demo.test.cjs         Testes locais com serviços simulados
 .github/workflows/tests.yml Testes em push e pull_request
 .gitignore                 Exclusões preventivas
