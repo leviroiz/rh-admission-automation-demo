@@ -28,6 +28,7 @@ O script lê uma linha, valida o registro e o nome demonstrativo, encontra ou cr
 - Reexecução recuperável: reaproveita pasta e atalhos existentes por ID de destino.
 - Bloqueio de concorrência dentro do mesmo projeto Apps Script.
 - Rejeição de registros duplicados, cabeçalhos ambíguos e URLs não suportadas.
+- Fórmulas proibidas em `Documentos`: `getFormulas()` detecta a fórmula mesmo quando o resultado calculado é uma URL válida ou vazio. Use URLs em texto simples.
 - Registro de pasta, status e horário; erros genéricos sem gravar informações pessoais em logs.
 
 ## Estrutura
@@ -35,8 +36,10 @@ O script lê uma linha, valida o registro e o nome demonstrativo, encontra ou cr
 ```text
 src/Code.gs                 Implementação Google Apps Script
 examples/respostas-demo.csv Registros inteiramente fictícios
+examples/README.md          Entradas e saídas esperadas, incluindo recuperação
 docs/fluxo.md               Fluxo, segurança e cenários de validação
 tests/demo.test.cjs         Testes locais com serviços simulados
+.github/workflows/tests.yml Testes em push e pull_request
 .gitignore                 Exclusões preventivas
 LICENSE                    Licença MIT para esta demonstração
 ```
@@ -76,11 +79,15 @@ Revise todo arquivo e o histórico antes de qualquer publicação. `.gitignore` 
 
 ## Testes e limitações
 
-Execute `node --test tests/demo.test.cjs` com Node.js 20 ou superior. Node é apenas uma ferramenta de teste; a automação executa no Google Apps Script. Os testes usam serviços simulados e não substituem a validação em uma conta Google de teste.
+Execute `node --test tests/demo.test.cjs` com Node.js 20 ou superior. A CI executa o mesmo comando com Node.js 24 em cada `push` e `pull_request`, sem credenciais Google. Node é apenas uma ferramenta de teste; a automação executa no Google Apps Script. Os testes automatizados usam serviços simulados e não substituem a validação real no Google, que deve usar conta/ambiente de teste e dados fictícios. Veja [entradas e saídas esperadas](examples/README.md).
 
 Não há transação atômica entre Sheets e Drive. Falhas parciais podem deixar pasta ou atalhos criados, que a próxima execução procura reaproveitar. O bloqueio não cobre outros projetos, edições manuais ou alterações concorrentes fora do script. Não altere registros, reordene linhas ou renomeie pastas durante o processamento. O registro deve ser único e imutável; alterações podem criar uma nova pasta. Atalhos antigos não são removidos se a lista de documentos diminuir. Pastas de mesmo nome causam erro para evitar associação ambígua.
 
-A simulação não valida permissões nem existência de arquivos no Drive. Não há fila, retentativa automática, antivírus, validação documental, decisão de admissão, gerenciamento de consentimento ou política de retenção. O exemplo limita cada linha a 20 links e não foi projetado para Shared Drives ou grande volume. Quotas e permissões do Google se aplicam. Erros deixam `ERRO_REVISAR`; links e datas anteriores podem permanecer e não indicam sucesso da tentativa atual.
+A simulação não valida permissões nem existência de arquivos no Drive. Não há fila, retentativa automática, antivírus, validação documental, decisão de admissão, gerenciamento de consentimento ou política de retenção. O exemplo limita cada linha a 20 links e não foi projetado para Shared Drives ou grande volume. Quotas e permissões do Google se aplicam.
+
+`ERRO_REVISAR` é uma tentativa de gravação, não uma garantia: falhas preliminares de aba, linha, lock ou cabeçalhos não atualizam o status. A escrita só ocorre após validar todos os cabeçalhos, nunca em coluna incerta. Se a própria gravação falhar, a exceção de processamento continua genérica e sanitizada, sem encadear detalhes do serviço. **Status, links e datas anteriores podem permanecer e não comprovam sucesso da tentativa atual**, inclusive quando a célula ainda mostra `CONCLUIDO`.
+
+Após adquirir o lock, o script tenta `SpreadsheetApp.flush()` antes de `releaseLock()` em sucesso, simulação e erro. A liberação é tentada mesmo se o flush falhar; falhas de flush/liberação também produzem exceção sanitizada. Um flush que falha torna a persistência incerta e não garante `ERRO_REVISAR`. Verifique a execução e reexecute após corrigir a causa no ambiente de teste.
 
 ## Referências oficiais
 
