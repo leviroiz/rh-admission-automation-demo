@@ -30,7 +30,7 @@ function config_() {
 function columns_(headers) {
   const columns = {};
   DEMO_HEADERS.forEach(name => {
-    if (headers.filter(h => h === name).length !== 1) throw new Error('CABECALHOS_INVALIDOS');
+    if (headers.filter(h => h === name).length !== 1) throw new DemoValidationError('CABECALHOS_INVALIDOS');
     columns[name] = headers.indexOf(name);
   });
   return columns;
@@ -85,15 +85,30 @@ function organize_(root, record) {
 }
 
 function processRow_(sheet, row) {
+  // Only errors constructed here may cross the public processing boundary.
+  try {
+    processRowWithLock_(sheet, row);
+  } catch (error) {
+    if (error instanceof DemoValidationError) throw error;
+    throw new Error('PROCESSAMENTO_FALHOU: revise configuracao, dados e permissoes no ambiente de teste.');
+  }
+}
+
+class DemoValidationError extends Error {}
+
+function processRowWithLock_(sheet, row) {
   const cfg = config_();
-  if (sheet.getName() !== cfg.sheet) throw new Error('ABA_INVALIDA');
-  if (!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()) throw new Error('LINHA_INVALIDA');
+  if (sheet.getName() !== cfg.sheet) throw new DemoValidationError('ABA_INVALIDA');
+  if (!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()) throw new DemoValidationError('LINHA_INVALIDA');
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) throw new Error('OCUPADO_TENTE_NOVAMENTE');
+  if (!lock.tryLock(10000)) throw new DemoValidationError('OCUPADO_TENTE_NOVAMENTE');
   try {
     const columns = columns_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
     try {
-      const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const range = sheet.getRange(row, 1, 1, sheet.getLastColumn());
+      // getValues() returns calculated results, so inspect formulas separately.
+      if (range.getFormulas()[0][columns.Documentos]) throw new Error('FORMULA_NAO_PERMITIDA');
+      const values = range.getValues()[0];
       const record = parseRecord_(values, columns);
       // One row per immutable record; reject duplicates before touching Drive.
       const records = sheet.getRange(2, columns.Registro + 1, sheet.getLastRow() - 1, 1).getValues();
@@ -109,13 +124,21 @@ function processRow_(sheet, row) {
       sheet.getRange(row, columns.Pasta + 1).setValue(url);
       sheet.getRange(row, columns['Processado em'] + 1).setValue(new Date());
       sheet.getRange(row, columns.Status + 1).setValue('CONCLUIDO');
-      SpreadsheetApp.flush();
     } catch (error) {
       // Never persist exception text, URLs, names, IDs, or raw records in logs.
-      sheet.getRange(row, columns.Status + 1).setValue('ERRO_REVISAR');
+      try {
+        sheet.getRange(row, columns.Status + 1).setValue('ERRO_REVISAR');
+      } catch (statusError) {
+        // Best effort only: a write failure must not expose service details.
+      }
       throw new Error('PROCESSAMENTO_FALHOU: revise configuracao, dados e permissoes no ambiente de teste.');
     }
   } finally {
-    lock.releaseLock();
+    // Includes simulation and error writes. Release even if persistence fails.
+    try {
+      SpreadsheetApp.flush();
+    } finally {
+      lock.releaseLock();
+    }
   }
 }

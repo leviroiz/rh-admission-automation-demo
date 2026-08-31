@@ -6,10 +6,12 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/Code.gs'), 'utf8');
 const iterator = values => { let i = 0; return { hasNext: () => i < values.length, next: () => values[i++] }; };
 
-function sandbox({ dryRun = true, rows, failAt = 0, lockAvailable = true } = {}) {
+function sandbox({ dryRun = true, rows, failAt = 0, lockAvailable = true,
+  documentFormula = '', failStatus = false, failFlush = false, failRelease = false } = {}) {
   const headers = ['Registro', 'Nome ficticio', 'Documentos', 'Pasta', 'Status', 'Processado em'];
   const cells = [headers, ...(rows || [['DEMO-001', 'Pessoa Ficticia 001', '', '', '', '']])];
   const folders = [];
+  const events = [];
   let attempts = 0, driveCalls = 0, releases = 0;
   const root = {
     isTrashed: () => false,
@@ -33,20 +35,32 @@ function sandbox({ dryRun = true, rows, failAt = 0, lockAvailable = true } = {})
     getName: () => 'Respostas Demo', getLastRow: () => cells.length, getLastColumn: () => headers.length,
     getRange(r, c, n = 1, m = 1) {
       return { getValues: () => cells.slice(r - 1, r - 1 + n).map(row => row.slice(c - 1, c - 1 + m)),
-        setValue: value => { cells[r - 1][c - 1] = value; } };
+        getFormulas: () => Array.from({ length: n }, (_, i) => Array.from({ length: m }, (_, j) =>
+          r + i === 2 && c + j === 3 ? documentFormula : '')),
+        setValue: value => {
+          events.push(`write:${value}`);
+          if (failStatus && value === 'ERRO_REVISAR') throw new Error('private status details');
+          cells[r - 1][c - 1] = value;
+        } };
     }
   };
   const context = vm.createContext({
     PropertiesService: { getScriptProperties: () => ({ getProperties: () => ({ DRY_RUN: String(dryRun), ROOT_FOLDER_ID: 'SYNTHETIC_ROOT' }) }) },
-    LockService: { getScriptLock: () => ({ tryLock: () => lockAvailable, releaseLock: () => releases++ }) },
-    SpreadsheetApp: { flush() {} },
+    LockService: { getScriptLock: () => ({ tryLock: () => lockAvailable, releaseLock: () => {
+      releases++; events.push('release');
+      if (failRelease) throw new Error('private release details');
+    } }) },
+    SpreadsheetApp: { flush() {
+      events.push('flush');
+      if (failFlush) throw new Error('private flush details');
+    } },
     DriveApp: {
       getFolderById: () => { driveCalls++; return root; },
       getFileById: id => { driveCalls++; if (id === 'INACCESSIBLE') throw new Error('private details'); return { isTrashed: () => false }; }
     }
   });
   vm.runInContext(source, context);
-  return { context, sheet, cells, folders, root, run: () => context.processRow_(sheet, 2),
+  return { context, sheet, cells, folders, root, events, run: () => context.processRow_(sheet, 2),
     stats: () => ({ driveCalls, releases }) };
 }
 const row = docs => ['DEMO-001', 'Pessoa Ficticia 001', docs, '', '', ''];
@@ -69,7 +83,78 @@ test('partial failure resumes without recreating successful shortcut', () => {
   assert.throws(s.run, /PROCESSAMENTO_FALHOU/); assert.equal(s.cells[1][4], 'ERRO_REVISAR');
   s.run(); assert.equal(s.folders.length, 1);
   assert.deepEqual(s.folders[0].targets, ['SYNTHETIC_A', 'SYNTHETIC_B']);
+  assert.equal(s.cells[1][4], 'CONCLUIDO');
   assert.equal(s.stats().releases, 2);
+});
+
+const sanitized = error => {
+  assert.equal(error.message, 'PROCESSAMENTO_FALHOU: revise configuracao, dados e permissoes no ambiente de teste.');
+  assert.equal(error.cause, undefined);
+  assert.doesNotMatch(error.stack, /private|INACCESSIBLE/);
+  return true;
+};
+
+test('failed error-status write never exposes either service exception', () => {
+  const s = sandbox({ dryRun: false, failStatus: true, rows: [row(link('INACCESSIBLE'))] });
+  s.cells[1][4] = 'CONCLUIDO';
+  assert.throws(s.run, sanitized);
+  assert.equal(s.cells[1][4], 'CONCLUIDO');
+  assert.deepEqual(s.events, ['write:ERRO_REVISAR', 'flush', 'release']);
+});
+
+test('flush follows writes and precedes release on simulation, success and failure', () => {
+  for (const options of [{}, { dryRun: false }, { dryRun: false, rows: [row(link('INACCESSIBLE'))] }]) {
+    const s = sandbox(options);
+    if (options.rows) assert.throws(s.run, sanitized); else s.run();
+    assert.deepEqual(s.events.slice(-2), ['flush', 'release']);
+    assert.ok(s.events.slice(0, -2).every(event => event.startsWith('write:')));
+    assert.equal(s.stats().releases, 1);
+  }
+});
+
+test('flush and release failures stay sanitized and release is always attempted', () => {
+  for (const dryRun of [true, false]) {
+    for (const options of [{ failFlush: true }, { failRelease: true },
+      { failFlush: true, failRelease: true, failStatus: true, rows: [row(link('INACCESSIBLE'))] }]) {
+      const s = sandbox({ dryRun, ...options });
+      assert.throws(s.run, sanitized);
+      assert.deepEqual(s.events.slice(-2), ['flush', 'release']);
+      assert.equal(s.stats().releases, 1);
+    }
+  }
+});
+
+test('preliminary failures preserve previous status and never guess a column', () => {
+  for (const scenario of ['sheet', 'row', 'lock', 'headers', 'duplicate status']) {
+    const s = sandbox({ lockAvailable: scenario !== 'lock' });
+    s.cells[1][4] = 'CONCLUIDO';
+    if (scenario === 'sheet') s.sheet.getName = () => 'Outra aba';
+    if (scenario === 'headers') s.cells[0][0] = 'Wrong header';
+    if (scenario === 'duplicate status') s.cells[0][3] = 'Status';
+    const before = JSON.stringify(s.cells);
+    assert.throws(() => s.context.processRow_(s.sheet, scenario === 'row' ? 1 : 2));
+    assert.equal(JSON.stringify(s.cells), before);
+    assert.equal(s.stats().driveCalls, 0);
+    assert.deepEqual(s.events, ['headers', 'duplicate status'].includes(scenario) ? ['flush', 'release'] : []);
+  }
+});
+
+test('real formulas are rejected even when calculated value is a valid URL or empty', () => {
+  for (const dryRun of [true, false]) {
+    for (const value of [link('SYNTHETIC_A'), '']) {
+      const s = sandbox({ dryRun, rows: [row(value)], documentFormula: '=HYPERLINK("synthetic", "synthetic")' });
+      assert.throws(s.run, sanitized);
+      assert.equal(s.cells[1][4], 'ERRO_REVISAR');
+      assert.equal(s.stats().driveCalls, 0);
+    }
+  }
+});
+
+test('unexpected preliminary service error is sanitized without writing status', () => {
+  const s = sandbox();
+  s.sheet.getName = () => { throw new Error('private sheet details'); };
+  assert.throws(s.run, sanitized);
+  assert.deepEqual(s.events, []);
 });
 test('duplicate record fails before touching Drive', () => {
   const s = sandbox({ dryRun: false, rows: [row(''), row('')] });
