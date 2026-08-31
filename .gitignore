@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.clasp.json
+.clasprc.json
+credentials*.json
+*service-account*.json
+*.pem
+*.key
+*.log
+node_modules/
+private/
+local/
+exports/
+.DS_Store
+Thumbs.db
