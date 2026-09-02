@@ -16,7 +16,7 @@ Reconstruída para portfólio: **não é código de produção, não contém dad
 - **Controle de concorrência** dentro do mesmo projeto Apps Script e sanitização de erros.
 - **Simulação por padrão**, sem acessar o Drive; originais não são movidos, copiados ou excluídos.
 
-**Validação real no Google: pendente.** Os testes locais não comprovam a integração real. O [roteiro de validação](docs/validacao-google.md) prepara os cenários e as evidências para a próxima etapa, exclusivamente em ambiente de teste.
+**Validação real parcial realizada em ambiente Google com dados sintéticos.** Veja os [resultados aprovados e as pendências](docs/validacao-google.md); o gatilho Forms/Sheets permanece não executado, sem validação completa ponta a ponta ou prontidão para produção.
 
 ## Contexto e problema
 
@@ -55,7 +55,7 @@ src/Code.gs                 Implementação Google Apps Script
 examples/respostas-demo.csv Registros inteiramente fictícios
 examples/README.md          Entradas e saídas esperadas, incluindo recuperação
 docs/fluxo.md               Fluxo, segurança e cenários de validação
-docs/validacao-google.md    Roteiro de integração real (execução pendente)
+docs/validacao-google.md    Validação real parcial, pendências e roteiro
 tests/demo.test.cjs         Testes locais com serviços simulados
 .github/workflows/tests.yml Testes em push e pull_request
 .gitignore                 Exclusões preventivas

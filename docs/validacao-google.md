@@ -1,6 +1,50 @@
-# Validação real no Google — roteiro de teste
+# Validação real no Google — resultados parciais e roteiro de teste
 
-**Estado: PENDENTE / NÃO EXECUTADO.** Este documento descreve expectativas, não resultados. Os 16 testes locais usam serviços simulados; não comprovam permissões, persistência ou gatilhos reais. Nenhum cenário abaixo foi executado como parte da preparação deste roteiro.
+**Estado: VALIDAÇÃO REAL PARCIAL EXECUTADA**, em ambiente Google de teste com dados sintéticos. Os resultados abaixo registram os cenários confirmados pelo operador durante a validação. O gatilho Forms/Sheets não foi executado; não houve validação completa ponta a ponta nem comprovação de prontidão para produção. Os 16 testes locais usam serviços simulados e são uma verificação separada.
+
+## Resultados confirmados no ambiente Google
+
+| Cenário | Estado | Resultado confirmado |
+| --- | --- | --- |
+| `DRY_RUN=true` | Executado / aprovado | Execução em modo de simulação. |
+| Execução real com Drive | Executado / aprovado | Processamento real integrado ao Drive. |
+| Criação de pasta | Executado / aprovado | Pasta criada no ambiente de teste. |
+| Reexecução sem duplicar pasta | Executado / aprovado | Pasta reaproveitada na reexecução. |
+| Criação de atalho | Executado / aprovado | Atalho criado no Drive. |
+| Reexecução sem duplicar atalho | Executado / aprovado | Atalho reaproveitado sem duplicação. |
+| Rejeição de link não suportado | Executado / aprovado | Link não suportado rejeitado. |
+| Rejeição de fórmula | Executado / aprovado | Entrada com fórmula rejeitada. |
+| Registro duplicado | Executado / aprovado | Duplicidade de registro detectada e rejeitada. |
+| Cabeçalho inválido | Executado / aprovado | Cabeçalho inválido rejeitado. |
+| Recuperação após correção de falha | Executado / aprovado | Reexecução bem-sucedida após corrigir a falha. |
+
+Este registro resume o relato de execução, sem atribuir data, commit testado, contagens ou evidências que não foram informados. A aprovação dos cenários acima não confirma automaticamente todos os passos e variações dos casos V01–V18 do roteiro. Em particular, rejeição de fórmula e de cabeçalho inválido não comprova separadamente todas as variantes; recuperação após correção não comprova o teste de falha parcial injetada.
+
+### Pendências e limites da cobertura
+
+| Cenário ou variação sem execução confirmada | Estado |
+| --- | --- |
+| V04 — destinos repetidos na mesma entrada e acréscimo posterior de destino | Pendente / não executado |
+| V05 — simulação após sucesso, com preservação de link/data anteriores | Pendente / não executado |
+| V06/V07 — cobertura de ambas as variantes de fórmula (URL calculada e fórmula vazia), além da rejeição confirmada acima | Pendente / não executado |
+| V09/V10 — cobertura de ambas as variantes de cabeçalho (ausente e ambíguo), além da rejeição confirmada acima | Pendente / não executado |
+| V11 — aba e linha inválidas | Pendente / não executado |
+| V13 — pastas ambíguas | Pendente / não executado |
+| Seção 5 — falha parcial injetada após criação do primeiro atalho e retomada | Pendente / não executado |
+| V14/V15 — destino e raiz inacessíveis com segunda conta de teste | Pendente / não executado |
+| V16–V18 — Forms/Sheets: gatilho instalável, envio simulado, envio real e reexecução manual da resposta | Pendente / não executado |
+| Upload nativo do Forms | Pendente / não executado; fora desta bateria |
+| Demais passos, variações e verificações do roteiro sem confirmação explícita | Pendente / não executado |
+
+Quotas, concorrência, falhas reais de serviço, escrita, `flush()` e liberação de lock não foram validadas no ambiente Google. A cobertura simulada não equivale à execução real desses caminhos.
+
+### Descoberta de validação — formato dos links do Drive
+
+Na validação, links gerados pelo Google Drive com `?usp=drive_link` não foram aceitos pelo parser atual, enquanto o formato `https://drive.google.com/file/d/ID_DO_ARQUIVO/view` funcionou. **Melhoria futura recomendada do parser:** ampliar o suporte ao parâmetro `usp=drive_link`, mantendo a validação dos formatos permitidos e acrescentando testes específicos. Esta atualização é somente documental; o parser permanece inalterado.
+
+## Roteiro para reprodução e cenários pendentes
+
+As seções a seguir preservam os procedimentos e resultados esperados. Elas não constituem evidência de execução integral; o estado efetivo está nas tabelas acima.
 
 ## 1. Preparação e regras de segurança
 
@@ -103,7 +147,7 @@ O evento da planilha fornece `e.range`, usado pelo código; veja os [objetos de 
 
 Mantenha notas privadas separadas do repositório. Para cada caso e tentativa, registre data/fuso, commit, modo (`true`/`false`), resultado da execução, estado da linha, contagens antes/depois, identidade preservada (sim/não), resultado observado e divergência. Use aliases `RAIZ_TESTE`, `ARQUIVO_A`, `ARQUIVO_B`; nunca IDs, e-mails, links privados ou URLs de execução.
 
-Modelo para preencher **somente depois de executar**, uma linha por tentativa:
+Modelo para futuras evidências detalhadas, a preencher **somente depois de executar**, uma linha por tentativa (não substitui o resumo dos resultados confirmados acima):
 
 | Caso / tentativa | Data e fuso | Commit | DRY_RUN | Esperado | Observado | Evidência sanitizada | Resultado |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -111,8 +155,8 @@ Modelo para preencher **somente depois de executar**, uma linha por tentativa:
 
 Para imagens públicas, prefira um recorte da linha sem `Documentos`/`Pasta`, acompanhado de contagens e texto sanitizado. Remova de forma irreversível barra de endereço, avatar, e-mail, IDs e URLs; revise também nomes de arquivos e metadados. Não publique exportações de planilha, propriedades do script ou logs brutos. Não coloque links privados nem mesmo por trás de rótulos Markdown. Capturas são opcionais: um relato sanitizado preciso é melhor que uma imagem arriscada.
 
-Critério de aprovação: todos os V01–V18 executados, resultados observados compatíveis, originais preservados, ausência de duplicação nas reexecuções e erros sanitizados. Se faltar conta, permissão ou evidência, registre **não executado**, **bloqueado** ou **reprovado**, sem transformar expectativa em resultado. Mesmo com aprovação, descreva apenas o ambiente e os cenários testados; não alegue prontidão para produção, desempenho, proteção de dados completa ou validação de falhas não exercitadas.
+Critério de aprovação integral do roteiro, **ainda não atingido**: todos os V01–V18 executados, resultados observados compatíveis, originais preservados, ausência de duplicação nas reexecuções e erros sanitizados. Se faltar conta, permissão ou evidência, registre **não executado**, **bloqueado** ou **reprovado**, sem transformar expectativa em resultado. Mesmo com aprovação, descreva apenas o ambiente e os cenários testados; não alegue prontidão para produção, desempenho, proteção de dados completa ou validação de falhas não exercitadas.
 
 Ao encerrar, volte `DRY_RUN=true`, remova o gatilho de teste, encerre o recebimento de respostas e confirme a restauração do código original. Mantenha os artefatos privados; não exclua dados nem altere permissões de outros ambientes. A remoção posterior dos artefatos de teste é uma decisão manual do operador.
 
-Somente após revisar as evidências, atualize este documento com resultados efetivamente observados e ajuste a indicação de pendência do README conforme a cobertura alcançada. Não substitua este roteiro por uma declaração genérica de sucesso. Publicação no GitHub exige uma etapa posterior e autorização para push.
+Em futuras execuções, atualize este documento somente com resultados efetivamente observados e ajuste o README conforme a cobertura alcançada. A validação parcial registrada é o encerramento desta etapa da demo; os cenários pendentes permanecem disponíveis para uma etapa futura. Não substitua este roteiro por uma declaração genérica de sucesso. Publicação no GitHub exige uma etapa posterior e autorização para push.
